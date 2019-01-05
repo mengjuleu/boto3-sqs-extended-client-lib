@@ -22,9 +22,6 @@ S3_BUCKET_NAME = 's3BucketName'
 
 class SQSClientExtended(SQSClientExtendedBase):
     """
-    A session stores configuration state and allows you to create service
-    clients and resources.
-
     :type aws_access_key_id: string
     :param aws_access_key_id: AWS access key ID
     :type aws_secret_access_key: string

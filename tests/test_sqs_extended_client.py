@@ -4,6 +4,7 @@ import string
 from unittest import TestCase
 from unittest.mock import MagicMock
 from sqs_client.SQSClientExtended import SQSClientExtended
+from sqs_client.SQSClientExtended import SQSExtendedClientConstants
 
 
 class SQSMessageMock(object):
@@ -42,9 +43,6 @@ class SQSClientMock(object):
             name = 'q_{}'.format(n)
             self.create_queue(QueueName=name)
 
-        url = self.create_queue(QueueName='unittest_queue')['QueueUrl']
-        #self.send_message(QueueUrl=url, MessageBody='hello')
-
     def _get_q(self, url):
         """ Helper method to quickly get a queue. """
         for q in self._queues.values():
@@ -73,8 +71,6 @@ class SQSClientMock(object):
         if len(message_body) > self.SQS_SIZE_LIMIT:
             raise ValueError('Message payload size is pover {}'.format(self.SQS_SIZE_LIMIT))
 
-        print(self._queues)
-
         for q in self._queues.values():
             if q.url == 'sqs://{}'.format(queue_url):
                 handle = ''.join(random.choice(string.ascii_lowercase) for
@@ -89,7 +85,7 @@ class SQSClientMock(object):
         max_num_of_messages = kwargs.get('MaxNumberOfMessages') or 1
         self._receive_messages_calls += 1
         for q in self._queues.values():
-            if q.url == queue_url:
+            if q.url == 'sqs://{}'.format(queue_url):
                 msgs = q.messages[:max_num_of_messages]
                 q.messages = q.messages[max_num_of_messages:]
                 return {'Messages': msgs} if msgs else {}
@@ -112,7 +108,6 @@ class SQSClientMock(object):
 
         for q in self._queues.values():
             if q.url == 'sqs://{}'.format(queue_url):
-                print(q.messages)
                 if q.messages:
                     return q.messages[-1]
         return None
@@ -165,7 +160,6 @@ class S3ResourceMock(object):
     def Bucket(self, name):  # noqa
         if name not in self._buckets:
             self._buckets[name] = S3Bucket(name)
-            self._buckets[name].put_object = MagicMock()
         return self._buckets[name]
 
     def Object(self, name, key):  # noqa
@@ -225,6 +219,7 @@ class TestSQSExtendedClient(TestCase):
     def test_send_small_payload(self):
         """Send small payload and S3 is not used.
         """
+        self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object = MagicMock()
         message_body = self._generate_str(self.SQS_SIZE_LIMIT)
         self.extendedsqs.send_message(
             QueueUrl=self.SQS_QUEUE_URL,
@@ -236,6 +231,7 @@ class TestSQSExtendedClient(TestCase):
     def test_send_large_payload(self):
         """Send large payload and S3 is used.
         """
+        self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object = MagicMock()
         message_body = self._generate_str(self.MORE_THAN_SQS_SIZE_LIMIT)
         self.extendedsqs.send_message(
             QueueUrl=self.SQS_QUEUE_URL,
@@ -246,6 +242,7 @@ class TestSQSExtendedClient(TestCase):
     def test_send_large_payload_disabled(self):
         """Send large payload when large payload support is disabled.
         """
+        self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object = MagicMock()
         message_body = self._generate_str(self.MORE_THAN_SQS_SIZE_LIMIT)
         self.extendedsqs.set_large_payload_support(enabled=False)
 
@@ -260,6 +257,7 @@ class TestSQSExtendedClient(TestCase):
     def test_send_small_payload_always_through_s3(self):
         """Send small payload if always through s3
         """
+        self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object = MagicMock()
         message_body = self._generate_str(self.LESS_THAN_SQS_SIZE_LIMIT)
         self.extendedsqs.set_always_through_s3(always_through_s3=True)
 
@@ -271,6 +269,7 @@ class TestSQSExtendedClient(TestCase):
         self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object.assert_called_once()
 
     def test_set_message_size_threshold(self):
+        self.extendedsqs.s3.Bucket(self.extendedsqs.s3_bucket_name).put_object = MagicMock()
         message_body = self._generate_str(self.ARBITRATY_SMALLER_THRESSHOLD * 2)
         self.extendedsqs.set_message_size_threshold(self.ARBITRATY_SMALLER_THRESSHOLD)
         self.extendedsqs.send_message(
@@ -283,6 +282,21 @@ class TestSQSExtendedClient(TestCase):
     def test_only_large_payload_to_s3_when_send_message_batch(self):
         pass
 
+    def test_no_message_attribute_when_send_small_payload(self):
+        message_body = self._generate_str(self.LESS_THAN_SQS_SIZE_LIMIT)
+        self.extendedsqs.send_message(
+            QueueUrl=self.SQS_QUEUE_URL,
+            MessageBody=message_body
+        )
+
+        msg = self.extendedsqs.sqs.peek_message(
+            QueueUrl=self.SQS_QUEUE_URL
+        )
+
+        message_attributes = msg['MessageAttributes']
+        self.assertNotIn(SQSExtendedClientConstants.RESERVED_ATTRIBUTE_NAME.value,
+                      message_attributes)
+
     def test_message_attribute_when_send_large_payload(self):
         message_body = self._generate_str(self.MORE_THAN_SQS_SIZE_LIMIT)
         self.extendedsqs.send_message(
@@ -293,6 +307,48 @@ class TestSQSExtendedClient(TestCase):
         msg = self.extendedsqs.sqs.peek_message(
             QueueUrl=self.SQS_QUEUE_URL
         )
+
+        message_attributes = msg['MessageAttributes']
+        self.assertIn(SQSExtendedClientConstants.RESERVED_ATTRIBUTE_NAME.value,
+                      message_attributes)
+        large_payload_attrs = message_attributes[SQSExtendedClientConstants.RESERVED_ATTRIBUTE_NAME.value]
+        self.assertEqual(large_payload_attrs['StringValue'], str(self.MORE_THAN_SQS_SIZE_LIMIT))
+        self.assertEqual(large_payload_attrs['DataType'], 'Number')
+
+    def test_receive_large_message_payload(self):
+        message_body = self._generate_str(self.MORE_THAN_SQS_SIZE_LIMIT)
+        self.extendedsqs.send_message(
+            QueueUrl=self.SQS_QUEUE_URL,
+            MessageBody=message_body
+        )
+
+        resp = self.extendedsqs.receive_message(
+            QueueUrl=self.SQS_QUEUE_URL
+        )
+
+        body = resp[0].get('Body')
+        receipt_handle = resp[0].get('ReceiptHandle')
+        self.assertEqual(message_body, body)
+        self.assertTrue(self.extendedsqs._is_s3_receipt_handle(receipt_handle))
+
+    def test_receive_small_message_payload(self):
+        message_body = self._generate_str(self.LESS_THAN_SQS_SIZE_LIMIT)
+        self.extendedsqs.send_message(
+            QueueUrl=self.SQS_QUEUE_URL,
+            MessageBody=message_body
+        )
+
+        resp = self.extendedsqs.receive_message(
+            QueueUrl=self.SQS_QUEUE_URL
+        )
+
+        body = resp[0].get('Body')
+        receipt_handle = resp[0].get('ReceiptHandle')
+        self.assertEqual(message_body, body)
+        self.assertFalse(self.extendedsqs._is_s3_receipt_handle(receipt_handle))
+
+    def test_delete_large_message_payload(self):
+        pass
 
     def _generate_str(self, length):
         return 's' * length
