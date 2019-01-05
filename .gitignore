@@ -1,0 +1,5 @@
+venv/
+init-env.sh
+sqs_client/__pycache__/
+.idea/
+__pycache__/
