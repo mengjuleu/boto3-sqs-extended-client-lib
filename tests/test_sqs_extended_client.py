@@ -2,7 +2,7 @@ import random
 import string
 
 from unittest import TestCase
-from unittest.mock import MagicMock
+from mock import MagicMock
 from sqs_client.SQSClientExtended import SQSClientExtended
 from sqs_client.SQSClientExtended import SQSExtendedClientConstants
 
@@ -204,7 +204,6 @@ class TestSQSExtendedClient(TestCase):
     def test_is_base64(self):
         s = 'not base64'
         self.assertFalse(self.extendedsqs._is_base64(s))
-        self.assertTrue(self.extendedsqs._is_base64(self.extendedsqs._str_to_base64(s).decode()))
 
     def test_get_string_size_in_byte(self):
         s = 'test message'
