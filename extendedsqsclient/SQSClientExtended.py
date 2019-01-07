@@ -5,7 +5,7 @@ import base64
 from enum import Enum
 from boto3.session import Session
 from botocore.exceptions import ClientError
-from sqs_client.SQSClientExtendedBase import SQSClientExtendedBase
+from extendedsqsclient.SQSClientExtendedBase import SQSClientExtendedBase
 
 
 class SQSExtendedClientConstants(Enum):

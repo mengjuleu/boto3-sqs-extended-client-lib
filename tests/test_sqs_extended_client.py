@@ -3,8 +3,8 @@ import string
 
 from unittest import TestCase
 from mock import MagicMock
-from sqs_client.SQSClientExtended import SQSClientExtended
-from sqs_client.SQSClientExtended import SQSExtendedClientConstants
+from extendedsqsclient.SQSClientExtended import SQSClientExtended
+from extendedsqsclient.SQSClientExtended import SQSExtendedClientConstants
 
 
 class SQSMessageMock(object):
